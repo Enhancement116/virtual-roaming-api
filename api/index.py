@@ -4,8 +4,10 @@ from supabase import create_client, Client
 import os
 import hashlib
 
+# 建立 FastAPI 實例
 app = FastAPI()
 
+# 設定 CORS 允許所有來源
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -13,10 +15,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 初始化
+# 初始化 Supabase 用戶端
+# 確保你在 Vercel 設定中已新增 SUPABASE_URL 與 SUPABASE_KEY 環境變數
 supabase: Client = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
 
-# 使用標準庫的 SHA-256 加密
+# 使用標準庫 hashlib 進行 SHA-256 加密，避免 bcrypt 相容性問題
 def hash_password(password: str):
     return hashlib.sha256(password.encode()).hexdigest()
 
@@ -32,10 +35,11 @@ async def register_user(user_data: dict):
     if not username or not password:
         raise HTTPException(status_code=400, detail="請提供帳號與密碼")
     
-    # 改用 hashlib 加密
+    # 進行加密
     hashed_password = hash_password(password)
     
     try:
+        # 寫入 Supabase
         supabase.table("users").insert({
             "username": username,
             "password_hash": hashed_password,
@@ -43,4 +47,5 @@ async def register_user(user_data: dict):
         }).execute()
         return {"status": "success", "message": "註冊成功"}
     except Exception as e:
+        # 回傳詳細錯誤供除錯
         raise HTTPException(status_code=400, detail=str(e))
