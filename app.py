@@ -1,42 +1,36 @@
 import streamlit as st
-import requests
-import os
-import pandas as pd
+import hashlib # 用於加密密碼
 
-# 1. 頁面配置 (強制全寬)
-st.set_page_config(layout="wide", page_title="GNSS Mission Control")
+# 簡易密碼加密函式
+def hash_password(password):
+    return hashlib.sha256(password.encode()).hexdigest()
 
-# 2. 強制隱藏 UI 與浮水印
-# 這些 CSS 會強制移除所有 Streamlit 的品牌標誌與全螢幕按鈕
-st.markdown("""
-<style>
-    #MainMenu, footer, header, .stDeployButton, button[title="View fullscreen"] { 
-        visibility: hidden !important; 
-        display: none !important; 
-    }
-    .stApp { 
-        background-color: #ffffff; 
-        color: #1e1e1e; 
-    }
-    h1, h2 { color: #2563eb; text-transform: uppercase; }
-</style>
-""", unsafe_allow_html=True)
-
-# 3. 身分驗證 (從環境變數讀取密碼)
-# 在 Vercel 環境變數設定 APP_PASSWORD，預設為空以確保安全性
-SECRET_PASS = os.getenv("APP_PASSWORD", "1234") 
-
+# 狀態管理
 if "auth" not in st.session_state: st.session_state.auth = False
+if "mode" not in st.session_state: st.session_state.mode = "Login"
 
 if not st.session_state.auth:
-    st.title("🛰️ SYSTEM ACCESS REQUIRED")
-    code = st.text_input("ENTER ACCESS CODE", type="password")
-    if st.button("LOGIN"):
-        if code == SECRET_PASS:
-            st.session_state.auth = True
-            st.rerun()
-        else:
-            st.error("Invalid Access Code")
+    st.title("🛰️ MISSION CONTROL ACCESS")
+    
+    # 模式切換
+    tab = st.radio("選擇模式", ["Login", "Register"], horizontal=True)
+    
+    username = st.text_input("Username")
+    password = st.text_input("Password", type="password")
+    
+    if tab == "Login":
+        if st.button("LOGIN"):
+            # 這裡呼叫你的 API 去驗證帳密
+            # response = requests.post("https://api.enhancement-social.org/auth/login", ...)
+            st.success("登入驗證中...")
+            
+    elif tab == "Register":
+        if st.button("REGISTER"):
+            # 這裡呼叫你的 API 去寫入新使用者
+            # hashed_pw = hash_password(password)
+            # response = requests.post("https://api.enhancement-social.org/auth/register", ...)
+            st.info("註冊請求已發送至資料庫")
+            
     st.stop()
 
 # 4. 儀表板主體
