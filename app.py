@@ -14,6 +14,7 @@ def hash_password(password):
 # 狀態管理
 if "auth" not in st.session_state: st.session_state.auth = False
 if "username" not in st.session_state: st.session_state.username = None
+if "user_weight" not in st.session_state: st.session_state.user_weight = 0
 if "waypoints" not in st.session_state: st.session_state.waypoints = [""]
 
 # --- 認證頁面 ---
@@ -35,9 +36,16 @@ if not st.session_state.auth:
                     if tab == "Login":
                         st.session_state.auth = True
                         st.session_state.username = username
+                        # 登入成功後，請 API 獲取一次權重存入狀態
+                        # 假設 API 有一個 /user/weight/{username} 路由
+                        try:
+                            w_res = requests.get(f"https://api.enhancement-social.org/user/weight/{username}")
+                            st.session_state.user_weight = w_res.json().get("weight", 0)
+                        except:
+                            st.session_state.user_weight = 0
                         st.rerun()
                     else:
-                        st.success("註冊成功！請聯繫管理員確認啟用。")
+                        st.success("註冊成功！")
                 else:
                     st.error(f"操作失敗: {response.json().get('detail', '未知錯誤')}")
             except Exception as e:
@@ -47,9 +55,8 @@ if not st.session_state.auth:
 # --- 儀表板主體 ---
 st.title("🛰️ GNSS & SDR MISSION CONTROL CENTER")
 
-# 假設從 API 獲取用戶權重 (這部分實際應用需串接後端 API)
-user_weight = 15 
-max_waypoints = round(user_weight * 0.2) if user_weight >= 10 else 1
+# 動態計算可輸入點位 (權重 * 0.2)
+max_waypoints = max(3, round(st.session_state.user_weight * 0.2))
 
 col1, col2 = st.columns([1, 2])
 
@@ -61,7 +68,7 @@ with col1:
     speed = st.number_input("🏃 VELOCITY (km/h)", value=16.5)
     priority = st.slider("⭐ MISSION PRIORITY", 1, 10, 1)
     
-    st.markdown(f"**📍 WAYPOINTS (Max: {max_waypoints})**")
+    st.markdown(f"**📍 WAYPOINTS (Allowed: {max_waypoints})**")
     for i in range(len(st.session_state.waypoints)):
         st.session_state.waypoints[i] = st.text_input(f"點位 {i+1}", value=st.session_state.waypoints[i], key=f"wp_{i}")
     
@@ -81,6 +88,7 @@ with col1:
             "waypoints": [w for w in st.session_state.waypoints if w],
             "start_time": datetime.now(timezone.utc).isoformat()
         }
+        # 405 修正：確保網址最後有 /，方法為 POST
         try:
             response = requests.post("https://api.enhancement-social.org/tasks/", json=payload)
             if response.status_code == 200:
@@ -97,14 +105,10 @@ with col2:
         if response.status_code == 200:
             data = response.json().get("data", [])
             if data:
-                st.table(pd.DataFrame(data)) # 顯示隱私過濾後的 WHO | TIME | Priority
-            else:
-                st.info("目前無活動任務")
+                st.table(pd.DataFrame(data))
     except:
         st.error("API 連線錯誤")
 
 if st.button("🚪 LOGOUT"):
-    st.session_state.auth = False
-    st.session_state.username = None
-    st.session_state.waypoints = [""]
+    for key in list(st.session_state.keys()): del st.session_state[key]
     st.rerun()
