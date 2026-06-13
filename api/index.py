@@ -17,6 +17,10 @@ app.add_middleware(
 supabase: Client = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
+@app.get("/")
+def read_root():
+    return {"message": "虛擬漫遊系統 API 運作中！"}
+
 # 1. 任務管理路由
 @app.post("/tasks/")
 def create_task(task: dict):
