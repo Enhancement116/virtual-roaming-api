@@ -1,61 +1,77 @@
 import streamlit as st
 import requests
-from streamlit_lottie import st_lottie
 import pandas as pd
 
+# 頁面設定
 st.set_page_config(layout="wide", page_title="GNSS Mission Control")
 
-# --- 賽博龐克 CSS ---
+# 賽博龐克風格 CSS
 st.markdown("""
 <style>
     .stApp { background-color: #050505; color: #00ff41; font-family: 'Consolas', monospace; }
-    .metric-card { background: #111; border: 1px solid #00ff41; padding: 20px; border-radius: 5px; }
-    h1, h2 { color: #00d2ff; text-transform: uppercase; letter-spacing: 2px; }
-    div[data-testid="stMetricValue"] { color: #00ff41; }
+    h1, h2 { color: #00d2ff; text-transform: uppercase; }
+    .stButton>button { background-color: #00ff41; color: #000; font-weight: bold; }
 </style>
 """, unsafe_allow_html=True)
 
+# 1. 身分驗證邏輯
+if "auth" not in st.session_state: st.session_state.auth = False
+
+if not st.session_state.auth:
+    st.title("🛰️ SYSTEM ACCESS REQUIRED")
+    code = st.text_input("ENTER ACCESS CODE", type="password")
+    if st.button("LOGIN"):
+        if code == "1234": # 可更改為你的密碼
+            st.session_state.auth = True
+            st.rerun()
+    st.stop()
+
+# 2. 儀表板主體
 st.title("🛰️ GNSS & SDR MISSION CONTROL CENTER")
 st.markdown("---")
 
-# --- 頂層指標列 (Metrics) ---
-col1, col2, col3, col4 = st.columns(4)
-col1.metric("SIGNAL STRENGTH", "98.2 dBm", "+0.5")
-col2.metric("SATELLITE LOCK", "12/24", "Stable")
-col3.metric("LATENCY", "12ms", "-2ms")
-col4.metric("SYSTEM LOAD", "42%", "Normal")
-
-# --- 左右佈局 ---
 left_col, right_col = st.columns([1, 2])
 
 with left_col:
     st.subheader("⚙️ MISSION CONFIGURATION")
-    region = st.selectbox("📍 TARGET REGION", ["高雄都會公園", "高雄美術館", "台北大安森林公園"])
-    speed = st.slider("🏃 VELOCITY (km/h)", 0.0, 50.0, 16.5)
+    
+    # 區域自由輸入 (預設值邏輯)
+    region = st.text_input("📍 TARGET REGION", placeholder="例如：高雄美術館")
+    if not region: region = "F459" # 若未輸入，強制設為 F459
+    
+    system = st.selectbox("📡 GNSS SYSTEM", ["BDS+GPS", "GPS", "BDS", "GLONASS"])
+    sampling = st.slider("📊 SAMPLING RATE (MHz)", 1.0, 50.0, 20.8)
+    speed = st.number_input("🏃 VELOCITY (km/h)", value=16.5)
+    priority = st.slider("⭐ MISSION PRIORITY", 1, 10, 1)
     
     if st.button("🚀 INITIATE SIGNAL SIMULATION"):
-        # 你的後端 API 呼叫
-        payload = {"region_name": region, "gnss_system": "BDS+GPS", "sampling_rate": 20.8, "speed_kmh": speed}
+        payload = {
+            "region_name": region,
+            "gnss_system": system,
+            "sampling_rate": sampling,
+            "speed_kmh": speed,
+            "priority": priority
+        }
         try:
+            # 呼叫你的 API
             requests.post("https://api.enhancement-social.org/tasks/", json=payload)
-            st.success("SIMULATION STREAM STARTING...")
-        except:
-            st.error("CONNECTION FAILED")
+            st.success(f"任務已發送至區域: {region} (權重: {priority})")
+        except Exception as e:
+            st.error(f"API 連線失敗: {e}")
 
 with right_col:
     st.subheader("📊 LIVE DATA TELEMETRY")
-    
-    # 即時表格
-    response = requests.get("https://api.enhancement-social.org/tasks/")
-    if response.status_code == 200:
-        data = response.json().get("data", [])
-        df = pd.DataFrame(data)
-        st.dataframe(df, use_container_width=True, height=300)
-    
-    # 虛擬日誌區 (看起來超專業)
-    st.subheader("🖥️ SYSTEM LOG")
-    log_area = st.empty()
-    log_area.text("> INITIALIZING SDR CORE...\n> LOADING EPHEMERIS DATA...\n> BDS+GPS LINK ESTABLISHED...")
+    # 讀取任務列表
+    try:
+        response = requests.get("https://api.enhancement-social.org/tasks/")
+        if response.status_code == 200:
+            data = response.json().get("data", [])
+            df = pd.DataFrame(data)
+            st.dataframe(df, use_container_width=True)
+        else:
+            st.warning("無即時數據")
+    except:
+        st.error("無法連接 API")
 
 st.markdown("---")
-st.caption("INTERNAL USE ONLY - AUTHORIZED ACCESS REQUIRED")
+st.caption("SYSTEM OPERATIONAL - AUTHORIZED ACCESS ONLY")
