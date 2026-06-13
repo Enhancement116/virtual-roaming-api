@@ -88,13 +88,24 @@ async def create_task(task: dict):
         
 @app.get("/tasks/")
 async def get_tasks():
-    response = supabase.table("roaming_tasks").select("username, weight, start_time").order("weight", desc=True).execute()
-    
-    sanitized_data = []
-    for t in response.data:
-        sanitized_data.append({
-            "WHO": t.get("username", "Unknown"), # 顯示真實帳號名稱
-            "TIME": str(t.get("start_time", ""))[:19].replace("T", " "), # 顯示格式化時間
-            "Priority": t.get("weight", 0)
-        })
-    return {"data": sanitized_data}
+    try:
+        # 使用 select 撈取所有需要的欄位
+        response = supabase.table("roaming_tasks").select("username, weight, start_time").order("weight", desc=True).execute()
+        
+        sanitized_data = []
+        if response.data:
+            for t in response.data:
+                # 處理可能的 NULL 值，確保不會崩潰
+                raw_time = t.get("start_time")
+                formatted_time = str(raw_time)[:19].replace("T", " ") if raw_time else "N/A"
+                
+                sanitized_data.append({
+                    "WHO": t.get("username", "Unknown"),
+                    "TIME": formatted_time,
+                    "Priority": t.get("weight", 0)
+                })
+        
+        return {"data": sanitized_data}
+    except Exception as e:
+        print(f"DEBUG ERROR: {e}") # 這裡會顯示具體的錯誤原因
+        raise HTTPException(status_code=500, detail=str(e))
