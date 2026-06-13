@@ -1,8 +1,8 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from supabase import create_client, Client
-from passlib.context import CryptContext
 import os
+import hashlib
 
 app = FastAPI()
 
@@ -15,14 +15,15 @@ app.add_middleware(
 
 # 初始化
 supabase: Client = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-# 確保根目錄有回應，避免 405
+# 使用標準庫的 SHA-256 加密
+def hash_password(password: str):
+    return hashlib.sha256(password.encode()).hexdigest()
+
 @app.get("/")
 def read_root():
     return {"status": "api_online"}
 
-# 強制定義註冊路徑
 @app.post("/auth/register")
 async def register_user(user_data: dict):
     username = user_data.get("username")
@@ -31,7 +32,8 @@ async def register_user(user_data: dict):
     if not username or not password:
         raise HTTPException(status_code=400, detail="請提供帳號與密碼")
     
-    hashed_password = pwd_context.hash(password)
+    # 改用 hashlib 加密
+    hashed_password = hash_password(password)
     
     try:
         supabase.table("users").insert({
