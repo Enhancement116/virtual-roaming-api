@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from supabase import create_client, Client
 import os
 import hashlib
+from datetime import datetime, timezone
 
 app = FastAPI()
 
@@ -13,10 +14,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 初始化 Supabase
 supabase: Client = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
 
-# 加密函式
 def hash_password(password: str):
     return hashlib.sha256(password.encode()).hexdigest()
 
@@ -31,13 +30,11 @@ async def register_user(user_data: dict):
     password = user_data.get("password")
     if not username or not password:
         raise HTTPException(status_code=400, detail="請提供帳號與密碼")
-    
     try:
-        # 新增帳號時，預設權重 weight 為 0
         supabase.table("users").insert({
             "username": username,
             "password_hash": hash_password(password),
-            "is_active": False,
+            "is_active": True, # 根據你的設定預設為 True
             "weight": 0 
         }).execute()
         return {"status": "success"}
@@ -48,53 +45,48 @@ async def register_user(user_data: dict):
 async def login(user_data: dict):
     username = user_data.get("username")
     password = user_data.get("password")
-    
     user = supabase.table("users").select("*").eq("username", username).execute()
     if not user.data or hash_password(password) != user.data[0]["password_hash"]:
         raise HTTPException(status_code=401, detail="帳號或密碼錯誤")
-    
-    if not user.data[0]["is_active"]:
-        raise HTTPException(status_code=403, detail="帳號尚未被啟用")
-        
     return {"status": "success", "username": username}
 
-# --- 任務路由 (具備插隊權重功能) ---
+# --- 任務路由 (動態點位 + UTC 時間 + 優先權重) ---
 @app.post("/tasks/")
 async def create_task(task: dict):
     username = task.get("username")
-    
-    # 除錯：如果收到的 username 是 None，這裡就會讀不到
     if not username:
-        raise HTTPException(status_code=400, detail="Missing username in request")
+        raise HTTPException(status_code=400, detail="Missing username")
     
-    # 1. 取得發起人的權重
+    # 1. 獲取權重
     user_res = supabase.table("users").select("weight").eq("username", username).execute()
-    
-    # 若沒找到人，權重預設為 0
     weight = user_res.data[0]["weight"] if user_res.data else 0
     
-    # 2. 將權重寫入任務資料中
-    task_data = task.copy()
-    task_data["weight"] = weight
-    
-    # 確保我們不把 username 存入 roaming_tasks (除非你表格有此欄位)
-    # 如果 roaming_tasks 沒有 username 欄位，記得 pop 掉
-    task_data.pop("username", None) 
+    # 2. 處理時間與點位
+    task_data = {
+        "region_name": task.get("region_name"),
+        "waypoints": task.get("waypoints", []),
+        "start_time": task.get("start_time") or datetime.now(timezone.utc).isoformat(),
+        "weight": weight
+    }
     
     try:
         response = supabase.table("roaming_tasks").insert(task_data).execute()
-        return {"status": "success", "assigned_weight": weight}
+        return {"status": "success", "weight": weight}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.get("/tasks/")
 async def get_tasks():
-    # 依據 weight 由大到小排序，權重最高者永遠在最上方 (插隊機制)
-    response = supabase.table("roaming_tasks").select("region_name, weight").order("weight", desc=True).execute()
+    # 依據 weight 排序實現插隊機制
+    response = supabase.table("roaming_tasks").select("region_name, weight, start_time").order("weight", desc=True).execute()
     
-    # 隱私過濾：只傳回區域名稱與權重等級，不顯示發起人資訊
+    # 隱私過濾：WHO (隱碼) + TIME (UTC) + Priority (權重)
     sanitized_data = [
-        {"region": t["region_name"], "priority": t["weight"]}
+        {
+            "WHO": "User_****", 
+            "TIME": t.get("start_time", "")[:19].replace("T", " "), 
+            "Priority": t.get("weight")
+        }
         for t in response.data
     ]
     return {"data": sanitized_data}
