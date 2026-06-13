@@ -63,3 +63,20 @@ if st.button("🚀 啟動漫遊任務", use_container_width=True, type="primary"
                 
         except requests.exceptions.RequestException as e:
             st.error(f"⚠️ 無法連線到伺服器，請確認後端 API 是否已啟動。\n\n詳細錯誤：{e}")
+# --- 歷史任務清單 ---
+st.divider()
+st.subheader("📋 歷史漫遊任務紀錄")
+
+if st.button("🔄 重新整理清單"):
+    try:
+        response = requests.get(API_URL)
+        if response.status_code == 200:
+            tasks = response.json().get("data", [])
+            if tasks:
+                st.table(tasks) # 這會自動幫你畫出一個漂亮的表格
+            else:
+                st.info("目前還沒有任務紀錄喔！")
+        else:
+            st.error("無法讀取清單")
+    except Exception as e:
+        st.error(f"連線錯誤：{e}")
