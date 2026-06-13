@@ -49,8 +49,8 @@ def create_task(task: RoamingTask):
 @app.get("/tasks/")
 def get_tasks():
     try:
-        # 從資料庫撈出所有資料，並依據建立時間排序
-        response = supabase.table("roaming_tasks").select("*").order("created_at", desc=True).execute()
+        # 直接拿全部資料，不指定排序，或者你可以用 id 排序
+        response = supabase.table("roaming_tasks").select("*").execute()
         return {
             "status": "success",
             "data": response.data
