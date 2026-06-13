@@ -74,16 +74,19 @@ async def create_task(task: dict):
 
 @app.get("/tasks/")
 async def get_tasks():
-    # 依據 weight 排序實現插隊機制
-    response = supabase.table("roaming_tasks").select("region_name, weight, start_time").order("weight", desc=True).execute()
-    
-    # 隱私過濾：WHO (隱碼) + TIME (UTC) + Priority (權重)
-    sanitized_data = [
-        {
-            "WHO": "User_****", 
-            "TIME": t.get("start_time", "")[:19].replace("T", " "), 
-            "Priority": t.get("weight")
-        }
-        for t in response.data
-    ]
-    return {"data": sanitized_data}
+    try:
+        # 只撈取資料庫確實有的欄位
+        response = supabase.table("roaming_tasks").select("region_name, weight, start_time").execute()
+        
+        sanitized_data = []
+        for t in response.data:
+            # 使用 .get() 並提供預設值，避免 NoneType 錯誤
+            sanitized_data.append({
+                "WHO": "User_****",
+                "TIME": str(t.get("start_time", "N/A"))[:16].replace("T", " "),
+                "Priority": t.get("weight", 0) or 0
+            })
+        return {"data": sanitized_data}
+    except Exception as e:
+        print(f"Error: {e}") # 查看詳細報錯
+        return {"data": []} # 發生錯誤時回傳空列表，避免網頁崩潰
