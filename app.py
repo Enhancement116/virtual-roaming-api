@@ -11,8 +11,8 @@ def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
 # 狀態管理
-if "auth" not in st.session_state:
-    st.session_state.auth = False
+if "auth" not in st.session_state: st.session_state.auth = False
+if "username" not in st.session_state: st.session_state.username = None
 
 # --- 認證頁面 ---
 if not st.session_state.auth:
@@ -32,6 +32,7 @@ if not st.session_state.auth:
                                            json={"username": username, "password": password})
                     if response.status_code == 200:
                         st.session_state.auth = True
+                        st.session_state.username = username # 記錄使用者名稱
                         st.rerun()
                     else:
                         st.error(f"登入失敗: {response.json().get('detail', '未知錯誤')}")
@@ -58,7 +59,7 @@ if not st.session_state.auth:
                         st.error("無法連接至認證伺服器。")
     st.stop()
 
-# --- 儀表板主體 (只有認證後可見) ---
+# --- 儀表板主體 ---
 st.title("🛰️ GNSS & SDR MISSION CONTROL CENTER")
 
 col1, col2 = st.columns([1, 2])
@@ -72,23 +73,22 @@ with col1:
     speed = st.number_input("🏃 VELOCITY (km/h)", value=16.5)
     priority = st.slider("⭐ MISSION PRIORITY", 1, 10, 1)
     
-   # 在 app.py 的 "🚀 INITIATE SIGNAL SIMULATION" 按鈕邏輯下
-if st.button("🚀 INITIATE SIGNAL SIMULATION"):
-    payload = {
-        "username": st.session_state.username, # 必須確認這裡有這行！
-        "region_name": target_region,
-        "gnss_system": system,
-        "sampling_rate": sampling,
-        "speed_kmh": speed,
-        "priority": priority
-    }
-    # 發送請求...
+    # 修復這裡的縮排與邏輯
+    if st.button("🚀 INITIATE SIGNAL SIMULATION"):
+        payload = {
+            "username": st.session_state.username,
+            "region_name": target_region,
+            "gnss_system": system,
+            "sampling_rate": sampling,
+            "speed_kmh": speed,
+            "priority": priority
+        }
         try:
             response = requests.post("https://api.enhancement-social.org/tasks/", json=payload)
             if response.status_code == 200:
                 st.success(f"任務已部署至: {target_region}")
             else:
-                st.error("伺服器回應錯誤")
+                st.error(f"伺服器回應錯誤: {response.status_code}")
         except Exception as e:
             st.error(f"連線失敗: {e}")
 
@@ -104,12 +104,10 @@ with col2:
                 st.info("目前無活動任務")
         else:
             st.error("無法取得數據")
-    except:
+    except Exception:
         st.error("API 連線錯誤")
 
 if st.button("🚪 LOGOUT"):
     st.session_state.auth = False
+    st.session_state.username = None
     st.rerun()
-
-st.markdown("---")
-st.caption("AUTHORIZED ACCESS ONLY | SYSTEM OPERATIONAL")
