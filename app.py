@@ -20,9 +20,20 @@ if not st.session_state.auth:
     
     if tab == "Login":
         if st.button("LOGIN"):
-            # 這裡呼叫你的 API 去驗證帳密
-            # response = requests.post("https://api.enhancement-social.org/auth/login", ...)
-            st.success("登入驗證中...")
+            if not username or not password:
+                st.warning("⚠️ 請輸入帳號與密碼")
+            else:
+                try:
+                    # 發送請求至後端登入路由
+                    response = requests.post("https://api.enhancement-social.org/auth/login", 
+                                           json={"username": username, "password": password})
+                    if response.status_code == 200:
+                        st.session_state.auth = True
+                        st.rerun() # 驗證成功後直接進入儀表板
+                    else:
+                        st.error(f"登入失敗: {response.json().get('detail', '未知錯誤')}")
+                except Exception as e:
+                    st.error("無法連接至認證伺服器")
             
     # 註冊模式下的回饋機制
     elif tab == "Register":
