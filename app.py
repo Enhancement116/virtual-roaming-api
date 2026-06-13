@@ -36,8 +36,7 @@ if not st.session_state.auth:
                     if tab == "Login":
                         st.session_state.auth = True
                         st.session_state.username = username
-                        # 登入成功後，請 API 獲取一次權重存入狀態
-                        # 假設 API 有一個 /user/weight/{username} 路由
+                        # 登入成功後，獲取權重存入狀態
                         try:
                             w_res = requests.get(f"https://api.enhancement-social.org/user/weight/{username}")
                             st.session_state.user_weight = w_res.json().get("weight", 0)
@@ -88,7 +87,6 @@ with col1:
             "waypoints": [w for w in st.session_state.waypoints if w],
             "start_time": datetime.now(timezone.utc).isoformat()
         }
-        # 405 修正：確保網址最後有 /，方法為 POST
         try:
             response = requests.post("https://api.enhancement-social.org/tasks/", json=payload)
             if response.status_code == 200:
@@ -109,6 +107,45 @@ with col2:
     except:
         st.error("API 連線錯誤")
 
+# --- ADMIN CONTROL PANEL (超級管理員區塊) ---
+if st.session_state.user_weight >= 999:
+    st.divider()
+    st.subheader("🛠️ SUPER ADMIN CONTROL PANEL")
+    
+    try:
+        # 為了演示，我們使用目前的 GET API 獲取資料
+        admin_res = requests.get("https://api.enhancement-social.org/tasks/")
+        if admin_res.status_code == 200:
+            admin_data = admin_res.json().get("data", [])
+            if admin_data:
+                df = pd.DataFrame(admin_data)
+                
+                # 1. 數據分析圖表
+                st.markdown("**📈 任務優先級分佈 (Priority Analytics)**")
+                st.bar_chart(df.groupby("WHO")["Priority"].sum())
+                
+                # 2. 即時資料編輯器
+                st.markdown("**📝 即時資料庫編輯 (直接雙擊下方表格進行修改)**")
+                # num_rows="dynamic" 允許你在網頁上直接增刪資料列
+                edited_df = st.data_editor(df, num_rows="dynamic", use_container_width=True)
+                
+                # 3. 儲存修改按鈕
+                if st.button("💾 儲存並同步至資料庫"):
+                    # 將修改後的資料轉回 JSON 格式送給後端
+                    updated_data = edited_df.to_dict(orient="records")
+                    update_res = requests.patch("https://api.enhancement-social.org/tasks/update/", json=updated_data)
+                    
+                    if update_res.status_code == 200:
+                        st.success("✅ 資料庫已成功更新！")
+                        st.rerun()
+                    else:
+                        st.error(f"更新失敗: {update_res.status_code} - {update_res.text}")
+            else:
+                st.info("目前沒有任務資料可供分析與編輯。")
+    except Exception as e:
+        st.error(f"無法載入管理員面板: {e}")
+
+st.divider()
 if st.button("🚪 LOGOUT"):
     for key in list(st.session_state.keys()): del st.session_state[key]
     st.rerun()
