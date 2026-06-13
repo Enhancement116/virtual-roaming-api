@@ -4,10 +4,8 @@ from supabase import create_client, Client
 import os
 import hashlib
 
-# 建立 FastAPI 實例
 app = FastAPI()
 
-# 設定 CORS 允許所有來源
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -15,11 +13,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 初始化 Supabase 用戶端
-# 確保你在 Vercel 設定中已新增 SUPABASE_URL 與 SUPABASE_KEY 環境變數
+# 初始化 Supabase
 supabase: Client = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
 
-# 使用標準庫 hashlib 進行 SHA-256 加密，避免 bcrypt 相容性問題
+# 加密函式
 def hash_password(password: str):
     return hashlib.sha256(password.encode()).hexdigest()
 
@@ -27,25 +24,48 @@ def hash_password(password: str):
 def read_root():
     return {"status": "api_online"}
 
+# --- 認證路由 ---
 @app.post("/auth/register")
 async def register_user(user_data: dict):
     username = user_data.get("username")
     password = user_data.get("password")
-    
     if not username or not password:
         raise HTTPException(status_code=400, detail="請提供帳號與密碼")
     
-    # 進行加密
-    hashed_password = hash_password(password)
-    
     try:
-        # 寫入 Supabase
         supabase.table("users").insert({
             "username": username,
-            "password_hash": hashed_password,
+            "password_hash": hash_password(password),
             "is_active": False
         }).execute()
-        return {"status": "success", "message": "註冊成功"}
+        return {"status": "success"}
     except Exception as e:
-        # 回傳詳細錯誤供除錯
         raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/auth/login")
+async def login(user_data: dict):
+    username = user_data.get("username")
+    password = user_data.get("password")
+    
+    user = supabase.table("users").select("*").eq("username", username).execute()
+    if not user.data or hash_password(password) != user.data[0]["password_hash"]:
+        raise HTTPException(status_code=401, detail="帳號或密碼錯誤")
+    
+    if not user.data[0]["is_active"]:
+        raise HTTPException(status_code=403, detail="帳號尚未被啟用")
+        
+    return {"status": "success"}
+
+# --- 任務路由 ---
+@app.post("/tasks/")
+async def create_task(task: dict):
+    try:
+        response = supabase.table("roaming_tasks").insert(task).execute()
+        return {"status": "success", "data": response.data}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.get("/tasks/")
+async def get_tasks():
+    response = supabase.table("roaming_tasks").select("*").execute()
+    return {"data": response.data}
