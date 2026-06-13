@@ -51,29 +51,31 @@ async def login(user_data: dict):
     return {"status": "success", "username": username}
 
 # --- 任務路由 (動態點位 + UTC 時間 + 優先權重) ---
+# --- 任務路由 (動態點位 + UTC 時間 + 優先權重) ---
 @app.post("/tasks/")
 async def create_task(task: dict):
     username = task.get("username")
     if not username:
         raise HTTPException(status_code=400, detail="Missing username")
     
-    # 從資料庫獲取權重
+    # 1. 從資料庫獲取真實權重
     user_res = supabase.table("users").select("weight").eq("username", username).execute()
     weight = user_res.data[0]["weight"] if user_res.data else 0
     
-    # 這裡將時間補上，若前端沒給，則用 UTC 現在時間
+    # 2. 處理時間
     start_time = task.get("start_time") or datetime.now(timezone.utc).isoformat()
     
-task_data = {
-        "username": task.get("username"),
+    # 3. 組裝資料 (修正縮排與正確對應)
+    task_data = {
+        "username": username,
         "region_name": task.get("region_name", "F459"),
         "gnss_system": task.get("gnss_system", "BDS+GPS"),
         "sampling_rate": task.get("sampling_rate", 20.8),
         "speed_kmh": task.get("speed_kmh", 16.5),
-        "weight": task.get("weight", 0),
+        "weight": weight, # 使用資料庫查詢到的真實權重
         "priority": task.get("priority", 1),
         "waypoints": task.get("waypoints", []),
-        "start_time": task.get("start_time")
+        "start_time": start_time # 使用處理過的時間
     }
     
     try:
@@ -81,6 +83,7 @@ task_data = {
         supabase.table("roaming_tasks").insert(task_data).execute()
         return {"status": "success"}
     except Exception as e:
+        # 如果還是 400，這裡的錯誤訊息會告訴你哪個欄位錯了
         raise HTTPException(status_code=400, detail=str(e))
         
 @app.get("/tasks/")
