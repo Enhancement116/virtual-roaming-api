@@ -63,13 +63,23 @@ async def login(user_data: dict):
 async def create_task(task: dict):
     username = task.get("username")
     
+    # 除錯：如果收到的 username 是 None，這裡就會讀不到
+    if not username:
+        raise HTTPException(status_code=400, detail="Missing username in request")
+    
     # 1. 取得發起人的權重
     user_res = supabase.table("users").select("weight").eq("username", username).execute()
+    
+    # 若沒找到人，權重預設為 0
     weight = user_res.data[0]["weight"] if user_res.data else 0
     
     # 2. 將權重寫入任務資料中
     task_data = task.copy()
     task_data["weight"] = weight
+    
+    # 確保我們不把 username 存入 roaming_tasks (除非你表格有此欄位)
+    # 如果 roaming_tasks 沒有 username 欄位，記得 pop 掉
+    task_data.pop("username", None) 
     
     try:
         response = supabase.table("roaming_tasks").insert(task_data).execute()
