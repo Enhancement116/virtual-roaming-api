@@ -23,7 +23,9 @@ def hash_password(password: str):
 def read_root():
     return {"status": "api_online"}
 
+# ==========================================
 # --- 認證路由 ---
+# ==========================================
 @app.post("/auth/register")
 async def register_user(user_data: dict):
     username = user_data.get("username")
@@ -60,7 +62,10 @@ async def get_user_weight(username: str):
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-# --- 任務路由 (建立任務) ---
+
+# ==========================================
+# --- 一般任務路由 ---
+# ==========================================
 @app.post("/tasks/")
 async def create_task(task: dict):
     username = task.get("username")
@@ -94,7 +99,7 @@ async def create_task(task: dict):
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
         
-# --- 任務路由 (讀取任務 Telemetry) ---
+# --- 讀取任務 Telemetry (首頁即時數據) ---
 @app.get("/tasks/")
 async def get_tasks():
     try:
@@ -118,22 +123,44 @@ async def get_tasks():
         print(f"DEBUG ERROR: {e}") 
         raise HTTPException(status_code=500, detail=str(e))
 
-# --- 任務路由 (超級管理員更新任務權重) ---
-@app.patch("/tasks/update/")
-async def update_tasks(data: list):
+
+# ==========================================
+# --- SUPER ADMIN 專屬路由 ---
+# ==========================================
+
+# 1. 獲取最詳細的任務資料 (包含所有欄位)
+@app.get("/admin/tasks/")
+async def get_all_tasks_detailed():
     try:
-        # 遍歷前端傳來的所有資料列進行更新
-        for item in data:
-            username = item.get("WHO")
-            new_weight = item.get("Priority")
-            
-            # 若有明確的帳號與權重，則更新對應使用者的任務
-            if username is not None and new_weight is not None:
-                supabase.table("roaming_tasks")\
-                    .update({"weight": new_weight})\
-                    .eq("username", username)\
-                    .execute()
-                    
+        response = supabase.table("roaming_tasks").select("*").order("start_time", desc=True).execute()
+        return {"data": response.data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# 2. 獲取所有使用者帳號資料
+@app.get("/admin/users/")
+async def get_all_users():
+    try:
+        response = supabase.table("users").select("id, username, is_active, weight").order("weight", desc=True).execute()
+        return {"data": response.data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# 3. 透過 Upsert (更新/插入) 儲存任務修改
+@app.patch("/admin/tasks/upsert/")
+async def upsert_tasks(data: list):
+    try:
+        # Supabase 的 upsert 會自動根據 Primary Key (id) 判斷要更新還是新增
+        supabase.table("roaming_tasks").upsert(data).execute()
+        return {"status": "success"}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+# 4. 透過 Upsert 儲存使用者修改
+@app.patch("/admin/users/upsert/")
+async def upsert_users(data: list):
+    try:
+        supabase.table("users").upsert(data).execute()
         return {"status": "success"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
