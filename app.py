@@ -24,12 +24,27 @@ if not st.session_state.auth:
             # response = requests.post("https://api.enhancement-social.org/auth/login", ...)
             st.success("登入驗證中...")
             
+    # 註冊模式下的回饋機制
     elif tab == "Register":
         if st.button("REGISTER"):
-            # 這裡呼叫你的 API 去寫入新使用者
-            # hashed_pw = hash_password(password)
-            # response = requests.post("https://api.enhancement-social.org/auth/register", ...)
-            st.info("註冊請求已發送至資料庫")
+            if not username or not password:
+                st.warning("⚠️ 請輸入帳號與密碼")
+            else:
+                # 使用狀態容器提供明確的反饋
+                with st.status("正在加密並上傳資料...", expanded=True) as status:
+                    try:
+                        response = requests.post("https://api.enhancement-social.org/auth/register", 
+                                               json={"username": username, "password": password})
+                        
+                        if response.status_code == 200:
+                            status.update(label="✅ 註冊申請已送出！", state="complete", expanded=False)
+                            st.success("請聯繫系統管理員以獲取存取權限。")
+                        else:
+                            status.update(label="❌ 註冊失敗", state="error")
+                            st.error(f"錯誤訊息: {response.json().get('detail', '未知錯誤')}")
+                    except Exception as e:
+                        status.update(label="⚠️ 連線中斷", state="error")
+                        st.error("無法連接至認證伺服器。")
             
     st.stop()
 
