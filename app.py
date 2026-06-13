@@ -1,82 +1,61 @@
 import streamlit as st
 import requests
+from streamlit_lottie import st_lottie
+import pandas as pd
 
-# 設定 FastAPI 後端的網址
-# ⚠️ 注意：這裡要換成你 Vercel 部署後的正式網址！
-# 在本地測試時，先用 http://127.0.0.1:8000
-API_URL = "https://virtual-roaming-api.vercel.app/tasks/"
-# 設定網頁標題與圖示
-st.set_page_config(page_title="虛擬定位漫遊系統", page_icon="🚶‍♂️", layout="centered")
+st.set_page_config(layout="wide", page_title="GNSS Mission Control")
 
-st.title("🚶‍♂️ 虛擬定位漫遊服務")
-st.markdown("專為 AR 遊戲玩家設計，設定你的散步計畫並開始自動漫遊！")
+# --- 賽博龐克 CSS ---
+st.markdown("""
+<style>
+    .stApp { background-color: #050505; color: #00ff41; font-family: 'Consolas', monospace; }
+    .metric-card { background: #111; border: 1px solid #00ff41; padding: 20px; border-radius: 5px; }
+    h1, h2 { color: #00d2ff; text-transform: uppercase; letter-spacing: 2px; }
+    div[data-testid="stMetricValue"] { color: #00ff41; }
+</style>
+""", unsafe_allow_html=True)
 
-st.divider()
+st.title("🛰️ GNSS & SDR MISSION CONTROL CENTER")
+st.markdown("---")
 
-# --- 建立使用者介面 ---
+# --- 頂層指標列 (Metrics) ---
+col1, col2, col3, col4 = st.columns(4)
+col1.metric("SIGNAL STRENGTH", "98.2 dBm", "+0.5")
+col2.metric("SATELLITE LOCK", "12/24", "Stable")
+col3.metric("LATENCY", "12ms", "-2ms")
+col4.metric("SYSTEM LOAD", "42%", "Normal")
 
-# 1. 選擇區域
-region_options = ["高雄都會公園", "高雄美術館", "台北大安森林公園", "台南奇美博物館"]
-selected_region = st.selectbox("📍 選擇漫遊區域：", region_options)
+# --- 左右佈局 ---
+left_col, right_col = st.columns([1, 2])
 
-# 2. 選擇 GNSS 系統
-gnss_options = ["GPS", "BDS", "BDS+GPS"]
-selected_gnss = st.selectbox("🛰️ 選擇定位星系：", gnss_options, index=2) # 預設選第三個 BDS+GPS
-
-# 3. 設定移動速率 (滑桿)
-st.markdown("🏃‍♂️ **設定移動速率 (km/h)**")
-st.caption("建議步行速度約為 3~5 km/h，腳踏車約為 10~15 km/h。過快可能導致遊戲判定異常。")
-selected_speed = st.slider("速率", min_value=1.0, max_value=20.0, value=4.5, step=0.5, label_visibility="collapsed")
-
-# 4. 設定取樣率 (進階選項，預設折疊)
-with st.expander("⚙️ 進階設定 (取樣率)"):
-    selected_sampling_rate = st.number_input("取樣率 (MHz)", value=20.8, min_value=1.0, max_value=50.0, step=0.1)
-
-st.divider()
-
-# --- 提交按鈕與 API 呼叫 ---
-
-if st.button("🚀 啟動漫遊任務", use_container_width=True, type="primary"):
-    # 準備要傳送給 API 的資料
-    payload = {
-        "region_name": selected_region,
-        "gnss_system": selected_gnss,
-        "sampling_rate": selected_sampling_rate,
-        "speed_kmh": selected_speed
-    }
+with left_col:
+    st.subheader("⚙️ MISSION CONFIGURATION")
+    region = st.selectbox("📍 TARGET REGION", ["高雄都會公園", "高雄美術館", "台北大安森林公園"])
+    speed = st.slider("🏃 VELOCITY (km/h)", 0.0, 50.0, 16.5)
     
-    with st.spinner('正在將任務發送至伺服器...'):
+    if st.button("🚀 INITIATE SIGNAL SIMULATION"):
+        # 你的後端 API 呼叫
+        payload = {"region_name": region, "gnss_system": "BDS+GPS", "sampling_rate": 20.8, "speed_kmh": speed}
         try:
-            # 發送 POST 請求到 FastAPI
-            response = requests.post(API_URL, json=payload)
-            
-            if response.status_code == 200:
-                result = response.json()
-                st.success(f"✅ {result['message']}")
-                st.balloons() # 放個氣球慶祝一下
-                
-                # 顯示回傳的資料
-                st.json(result["data"])
-            else:
-                st.error(f"❌ 錯誤：{response.status_code}")
-                st.json(response.json())
-                
-        except requests.exceptions.RequestException as e:
-            st.error(f"⚠️ 無法連線到伺服器，請確認後端 API 是否已啟動。\n\n詳細錯誤：{e}")
-# --- 歷史任務清單 ---
-st.divider()
-st.subheader("📋 歷史漫遊任務紀錄")
+            requests.post("https://api.enhancement-social.org/tasks/", json=payload)
+            st.success("SIMULATION STREAM STARTING...")
+        except:
+            st.error("CONNECTION FAILED")
 
-if st.button("🔄 重新整理清單"):
-    try:
-        response = requests.get(API_URL)
-        if response.status_code == 200:
-            tasks = response.json().get("data", [])
-            if tasks:
-                st.table(tasks) # 這會自動幫你畫出一個漂亮的表格
-            else:
-                st.info("目前還沒有任務紀錄喔！")
-        else:
-            st.error("無法讀取清單")
-    except Exception as e:
-        st.error(f"連線錯誤：{e}")
+with right_col:
+    st.subheader("📊 LIVE DATA TELEMETRY")
+    
+    # 即時表格
+    response = requests.get("https://api.enhancement-social.org/tasks/")
+    if response.status_code == 200:
+        data = response.json().get("data", [])
+        df = pd.DataFrame(data)
+        st.dataframe(df, use_container_width=True, height=300)
+    
+    # 虛擬日誌區 (看起來超專業)
+    st.subheader("🖥️ SYSTEM LOG")
+    log_area = st.empty()
+    log_area.text("> INITIALIZING SDR CORE...\n> LOADING EPHEMERIS DATA...\n> BDS+GPS LINK ESTABLISHED...")
+
+st.markdown("---")
+st.caption("INTERNAL USE ONLY - AUTHORIZED ACCESS REQUIRED")
