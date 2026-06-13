@@ -4,8 +4,7 @@ import requests
 # 設定 FastAPI 後端的網址
 # ⚠️ 注意：這裡要換成你 Vercel 部署後的正式網址！
 # 在本地測試時，先用 http://127.0.0.1:8000
-API_URL = "http://127.0.0.1:8000/tasks/"
-
+API_URL = "https://virtual-roaming-api.vercel.app/tasks/"
 # 設定網頁標題與圖示
 st.set_page_config(page_title="虛擬定位漫遊系統", page_icon="🚶‍♂️", layout="centered")
 

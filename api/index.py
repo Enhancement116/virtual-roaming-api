@@ -45,3 +45,15 @@ def create_task(task: RoamingTask):
     except Exception as e:
         # 如果發生錯誤，回傳 400 錯誤碼與錯誤訊息
         raise HTTPException(status_code=400, detail=f"寫入資料庫失敗：{e}")
+# 在 create_task 函式下方加入這個 GET 路由
+@app.get("/tasks/")
+def get_tasks():
+    try:
+        # 從資料庫撈出所有資料，並依據建立時間排序
+        response = supabase.table("roaming_tasks").select("*").order("created_at", desc=True).execute()
+        return {
+            "status": "success",
+            "data": response.data
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"讀取資料庫失敗：{e}")
