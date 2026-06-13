@@ -79,19 +79,13 @@ async def create_task(task: dict):
         raise HTTPException(status_code=400, detail=str(e))
 @app.get("/tasks/")
 async def get_tasks():
-    try:
-        # 只撈取資料庫確實有的欄位
-        response = supabase.table("roaming_tasks").select("region_name, weight, start_time").execute()
-        
-        sanitized_data = []
-        for t in response.data:
-            # 使用 .get() 並提供預設值，避免 NoneType 錯誤
-            sanitized_data.append({
-                "WHO": "User_****",
-                "TIME": str(t.get("start_time", "N/A"))[:16].replace("T", " "),
-                "Priority": t.get("weight", 0) or 0
-            })
-        return {"data": sanitized_data}
-    except Exception as e:
-        print(f"Error: {e}") # 查看詳細報錯
-        return {"data": []} # 發生錯誤時回傳空列表，避免網頁崩潰
+    response = supabase.table("roaming_tasks").select("username, weight, start_time").order("weight", desc=True).execute()
+    
+    sanitized_data = []
+    for t in response.data:
+        sanitized_data.append({
+            "WHO": t.get("username", "Unknown"), # 顯示真實帳號名稱
+            "TIME": str(t.get("start_time", ""))[:19].replace("T", " "), # 顯示格式化時間
+            "Priority": t.get("weight", 0)
+        })
+    return {"data": sanitized_data}
