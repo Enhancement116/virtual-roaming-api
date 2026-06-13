@@ -36,12 +36,17 @@ if not st.session_state.auth:
                     if tab == "Login":
                         st.session_state.auth = True
                         st.session_state.username = username
-                        # 登入成功後，獲取權重存入狀態
+                        
+                        # 登入成功後，嚴格獲取權重並強制轉為整數
                         try:
-                            w_res = requests.get(f"https://api.enhancement-social.org/user/weight/{username}")
-                            st.session_state.user_weight = w_res.json().get("weight", 0)
+                            w_res = requests.get(f"https://api.enhancement-social.org/user/weight/{username}", timeout=5)
+                            if w_res.status_code == 200:
+                                st.session_state.user_weight = int(w_res.json().get("weight", 0))
+                            else:
+                                st.session_state.user_weight = 0
                         except:
                             st.session_state.user_weight = 0
+                            
                         st.rerun()
                     else:
                         st.success("註冊成功！")
@@ -107,43 +112,89 @@ with col2:
     except:
         st.error("API 連線錯誤")
 
+# ==========================================
 # --- ADMIN CONTROL PANEL (超級管理員區塊) ---
+# ==========================================
 if st.session_state.user_weight >= 999:
     st.divider()
-    st.subheader("🛠️ SUPER ADMIN CONTROL PANEL")
+    st.title("👑 SUPER ADMIN CONTROL PANEL")
+    st.markdown("歡迎登入，您擁有最高系統權限。您可以在此監控營運數據並直接修改底層資料庫。")
     
     try:
-        # 為了演示，我們使用目前的 GET API 獲取資料
-        admin_res = requests.get("https://api.enhancement-social.org/tasks/")
-        if admin_res.status_code == 200:
-            admin_data = admin_res.json().get("data", [])
-            if admin_data:
-                df = pd.DataFrame(admin_data)
+        # 取得最詳細的資料 (呼叫後端 Admin 專屬路由)
+        task_res = requests.get("https://api.enhancement-social.org/admin/tasks/")
+        user_res = requests.get("https://api.enhancement-social.org/admin/users/")
+        
+        if task_res.status_code == 200 and user_res.status_code == 200:
+            tasks_data = task_res.json().get("data", [])
+            users_data = user_res.json().get("data", [])
+            
+            df_tasks = pd.DataFrame(tasks_data)
+            df_users = pd.DataFrame(users_data)
+            
+            # --- 📊 數據分析區塊 ---
+            st.subheader("📊 系統營運數據分析")
+            if not df_tasks.empty:
+                col_a, col_b = st.columns(2)
                 
-                # 1. 數據分析圖表
-                st.markdown("**📈 任務優先級分佈 (Priority Analytics)**")
-                st.bar_chart(df.groupby("WHO")["Priority"].sum())
-                
-                # 2. 即時資料編輯器
-                st.markdown("**📝 即時資料庫編輯 (直接雙擊下方表格進行修改)**")
-                # num_rows="dynamic" 允許你在網頁上直接增刪資料列
-                edited_df = st.data_editor(df, num_rows="dynamic", use_container_width=True)
-                
-                # 3. 儲存修改按鈕
-                if st.button("💾 儲存並同步至資料庫"):
-                    # 將修改後的資料轉回 JSON 格式送給後端
-                    updated_data = edited_df.to_dict(orient="records")
-                    update_res = requests.patch("https://api.enhancement-social.org/tasks/update/", json=updated_data)
+                with col_a:
+                    st.markdown("**📡 使用者 GNSS 系統偏好**")
+                    system_counts = df_tasks['gnss_system'].value_counts()
+                    st.bar_chart(system_counts)
                     
-                    if update_res.status_code == 200:
-                        st.success("✅ 資料庫已成功更新！")
+                with col_b:
+                    st.markdown("**🕒 任務執行時段熱區 (UTC 小時)**")
+                    # 安全地解析時間並提取小時
+                    df_tasks['parsed_time'] = pd.to_datetime(df_tasks['start_time'], errors='coerce')
+                    df_tasks['hour'] = df_tasks['parsed_time'].dt.hour
+                    hourly_counts = df_tasks['hour'].value_counts().sort_index()
+                    st.line_chart(hourly_counts)
+                    
+                    # 清理暫時用來分析的欄位，以免干擾下方的編輯器
+                    df_tasks = df_tasks.drop(columns=['parsed_time', 'hour'])
+            else:
+                st.info("目前尚無任務數據可供分析。")
+
+            st.divider()
+
+            # --- 📝 即時資料庫編輯區塊 ---
+            st.subheader("📝 核心資料庫編輯 (Database Inline Editor)")
+            
+            tab1, tab2 = st.tabs(["🛰️ 任務管理 (roaming_tasks)", "👥 帳號管理 (users)"])
+            
+            with tab1:
+                st.markdown("您可以直接修改數值、勾選左側刪除，或在最下方新增一筆資料。")
+                edited_tasks = st.data_editor(df_tasks, num_rows="dynamic", use_container_width=True, key="task_editor")
+                if st.button("💾 儲存任務修改 (Save Tasks)"):
+                    payload = edited_tasks.to_dict(orient="records")
+                    # 將時間格式轉回字串，避免 JSON 序列化報錯
+                    for row in payload:
+                        if isinstance(row.get('start_time'), pd.Timestamp):
+                            row['start_time'] = row['start_time'].isoformat()
+                            
+                    res = requests.patch("https://api.enhancement-social.org/admin/tasks/upsert/", json=payload)
+                    if res.status_code == 200:
+                        st.success("✅ 任務資料庫已更新！")
                         st.rerun()
                     else:
-                        st.error(f"更新失敗: {update_res.status_code} - {update_res.text}")
-            else:
-                st.info("目前沒有任務資料可供分析與編輯。")
+                        st.error(f"更新失敗: {res.text}")
+
+            with tab2:
+                st.markdown("您可以修改使用者的權重 (weight) 或啟用狀態 (is_active)。")
+                edited_users = st.data_editor(df_users, num_rows="dynamic", use_container_width=True, key="user_editor")
+                if st.button("💾 儲存帳號修改 (Save Users)"):
+                    payload = edited_users.to_dict(orient="records")
+                    res = requests.patch("https://api.enhancement-social.org/admin/users/upsert/", json=payload)
+                    if res.status_code == 200:
+                        st.success("✅ 帳號資料庫已更新！")
+                        st.rerun()
+                    else:
+                        st.error(f"更新失敗: {res.text}")
+
+        else:
+            st.error("無法取得管理員資料，請確認後端 API 是否已更新。")
     except Exception as e:
-        st.error(f"無法載入管理員面板: {e}")
+        st.error(f"管理面板發生錯誤: {e}")
 
 st.divider()
 if st.button("🚪 LOGOUT"):
