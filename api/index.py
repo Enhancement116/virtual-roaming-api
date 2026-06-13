@@ -64,19 +64,25 @@ async def create_task(task: dict):
     # 這裡將時間補上，若前端沒給，則用 UTC 現在時間
     start_time = task.get("start_time") or datetime.now(timezone.utc).isoformat()
     
-    task_data = {
-        "username": username, # 存入 username 以便顯示
-        "region_name": task.get("region_name", "Unknown"),
-        "weight": weight,
-        "start_time": start_time,
-        "waypoints": task.get("waypoints", [])
+task_data = {
+        "username": task.get("username"),
+        "region_name": task.get("region_name", "F459"),
+        "gnss_system": task.get("gnss_system", "BDS+GPS"),
+        "sampling_rate": task.get("sampling_rate", 20.8),
+        "speed_kmh": task.get("speed_kmh", 16.5),
+        "weight": task.get("weight", 0),
+        "priority": task.get("priority", 1),
+        "waypoints": task.get("waypoints", []),
+        "start_time": task.get("start_time")
     }
     
     try:
+        # 將這些資料寫入資料庫
         supabase.table("roaming_tasks").insert(task_data).execute()
         return {"status": "success"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+        
 @app.get("/tasks/")
 async def get_tasks():
     response = supabase.table("roaming_tasks").select("username, weight, start_time").order("weight", desc=True).execute()
