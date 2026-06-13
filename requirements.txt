@@ -4,4 +4,3 @@ supabase
 python-dotenv
 streamlit-lottie
 uvicorn
-passlib[bcrypt]
