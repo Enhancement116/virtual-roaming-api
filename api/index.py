@@ -34,7 +34,7 @@ async def register_user(user_data: dict):
         supabase.table("users").insert({
             "username": username,
             "password_hash": hash_password(password),
-            "is_active": True, # 根據你的設定預設為 True
+            "is_active": True, 
             "weight": 0 
         }).execute()
         return {"status": "success"}
@@ -50,8 +50,17 @@ async def login(user_data: dict):
         raise HTTPException(status_code=401, detail="帳號或密碼錯誤")
     return {"status": "success", "username": username}
 
-# --- 任務路由 (動態點位 + UTC 時間 + 優先權重) ---
-# --- 任務路由 (動態點位 + UTC 時間 + 優先權重) ---
+# --- 取得使用者權重 (供前端動態解鎖管理員面板與點位) ---
+@app.get("/user/weight/{username}")
+async def get_user_weight(username: str):
+    try:
+        res = supabase.table("users").select("weight").eq("username", username).execute()
+        weight = res.data[0]["weight"] if res.data else 0
+        return {"weight": weight}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+# --- 任務路由 (建立任務) ---
 @app.post("/tasks/")
 async def create_task(task: dict):
     username = task.get("username")
@@ -65,37 +74,36 @@ async def create_task(task: dict):
     # 2. 處理時間
     start_time = task.get("start_time") or datetime.now(timezone.utc).isoformat()
     
-    # 3. 組裝資料 (修正縮排與正確對應)
+    # 3. 組裝資料 
     task_data = {
         "username": username,
         "region_name": task.get("region_name", "F459"),
         "gnss_system": task.get("gnss_system", "BDS+GPS"),
         "sampling_rate": task.get("sampling_rate", 20.8),
         "speed_kmh": task.get("speed_kmh", 16.5),
-        "weight": weight, # 使用資料庫查詢到的真實權重
+        "weight": weight, 
         "priority": task.get("priority", 1),
         "waypoints": task.get("waypoints", []),
-        "start_time": start_time # 使用處理過的時間
+        "start_time": start_time 
     }
     
     try:
-        # 將這些資料寫入資料庫
+        # 將資料寫入資料庫
         supabase.table("roaming_tasks").insert(task_data).execute()
         return {"status": "success"}
     except Exception as e:
-        # 如果還是 400，這裡的錯誤訊息會告訴你哪個欄位錯了
         raise HTTPException(status_code=400, detail=str(e))
         
+# --- 任務路由 (讀取任務 Telemetry) ---
 @app.get("/tasks/")
 async def get_tasks():
     try:
-        # 使用 select 撈取所有需要的欄位
+        # 撈取所有需要的欄位
         response = supabase.table("roaming_tasks").select("username, weight, start_time").order("weight", desc=True).execute()
         
         sanitized_data = []
         if response.data:
             for t in response.data:
-                # 處理可能的 NULL 值，確保不會崩潰
                 raw_time = t.get("start_time")
                 formatted_time = str(raw_time)[:19].replace("T", " ") if raw_time else "N/A"
                 
@@ -107,5 +115,25 @@ async def get_tasks():
         
         return {"data": sanitized_data}
     except Exception as e:
-        print(f"DEBUG ERROR: {e}") # 這裡會顯示具體的錯誤原因
+        print(f"DEBUG ERROR: {e}") 
         raise HTTPException(status_code=500, detail=str(e))
+
+# --- 任務路由 (超級管理員更新任務權重) ---
+@app.patch("/tasks/update/")
+async def update_tasks(data: list):
+    try:
+        # 遍歷前端傳來的所有資料列進行更新
+        for item in data:
+            username = item.get("WHO")
+            new_weight = item.get("Priority")
+            
+            # 若有明確的帳號與權重，則更新對應使用者的任務
+            if username is not None and new_weight is not None:
+                supabase.table("roaming_tasks")\
+                    .update({"weight": new_weight})\
+                    .eq("username", username)\
+                    .execute()
+                    
+        return {"status": "success"}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
