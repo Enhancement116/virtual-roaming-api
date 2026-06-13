@@ -51,29 +51,25 @@ async def login(user_data: dict):
     return {"status": "success", "username": username}
 
 # --- 任務路由 (動態點位 + UTC 時間 + 優先權重) ---
-@app.post("/tasks/")
-async def create_task(task: dict):
-    username = task.get("username")
-    if not username:
-        raise HTTPException(status_code=400, detail="Missing username")
-    
-    # 1. 獲取權重
-    user_res = supabase.table("users").select("weight").eq("username", username).execute()
-    weight = user_res.data[0]["weight"] if user_res.data else 0
-    
-    # 2. 處理時間與點位
-    task_data = {
-        "region_name": task.get("region_name"),
-        "waypoints": task.get("waypoints", []),
-        "start_time": task.get("start_time") or datetime.now(timezone.utc).isoformat(),
-        "weight": weight
-    }
-    
+@app.get("/tasks/")
+async def get_tasks():
     try:
-        response = supabase.table("roaming_tasks").insert(task_data).execute()
-        return {"status": "success", "weight": weight}
+        # 只選擇明確存在的欄位，避免撈取到未定義的欄位崩潰
+        response = supabase.table("roaming_tasks").select("region_name, weight, start_time, waypoints, sampling_rate, speed_kmh, priority").order("weight", desc=True).execute()
+        
+        sanitized_data = []
+        for t in response.data:
+            sanitized_data.append({
+                "region": t.get("region_name", "Unknown"),
+                "sampling_rate": t.get("sampling_rate", 0),
+                "speed": t.get("speed_kmh", 0),
+                "TIME": t.get("start_time", "")[:16].replace("T", " "),
+                "Priority": t.get("weight", 0)
+            })
+        return {"data": sanitized_data}
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        # 這裡會回傳真實錯誤，讓你知道是哪個欄位錯了
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/tasks/")
 async def get_tasks():
