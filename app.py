@@ -72,14 +72,17 @@ with col1:
     speed = st.number_input("🏃 VELOCITY (km/h)", value=16.5)
     priority = st.slider("⭐ MISSION PRIORITY", 1, 10, 1)
     
-    if st.button("🚀 INITIATE SIGNAL SIMULATION"):
-        payload = {
-            "region_name": target_region,
-            "gnss_system": system,
-            "sampling_rate": sampling,
-            "speed_kmh": speed,
-            "priority": priority
-        }
+   # 在 app.py 的 "🚀 INITIATE SIGNAL SIMULATION" 按鈕邏輯下
+if st.button("🚀 INITIATE SIGNAL SIMULATION"):
+    payload = {
+        "username": st.session_state.username, # 必須確認這裡有這行！
+        "region_name": target_region,
+        "gnss_system": system,
+        "sampling_rate": sampling,
+        "speed_kmh": speed,
+        "priority": priority
+    }
+    # 發送請求...
         try:
             response = requests.post("https://api.enhancement-social.org/tasks/", json=payload)
             if response.status_code == 200:
