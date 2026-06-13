@@ -53,25 +53,30 @@ async def login(user_data: dict):
 # --- 任務路由 (動態點位 + UTC 時間 + 優先權重) ---
 @app.post("/tasks/")
 async def create_task(task: dict):
-    # 確保每個欄位都有值，如果沒有則給予預設值 (避免 NULL)
+    username = task.get("username")
+    if not username:
+        raise HTTPException(status_code=400, detail="Missing username")
+    
+    # 從資料庫獲取權重
+    user_res = supabase.table("users").select("weight").eq("username", username).execute()
+    weight = user_res.data[0]["weight"] if user_res.data else 0
+    
+    # 這裡將時間補上，若前端沒給，則用 UTC 現在時間
+    start_time = task.get("start_time") or datetime.now(timezone.utc).isoformat()
+    
     task_data = {
+        "username": username, # 存入 username 以便顯示
         "region_name": task.get("region_name", "Unknown"),
-        "gnss_system": task.get("gnss_system", "GPS"),
-        "sampling_rate": task.get("sampling_rate", 20.8),
-        "speed_kmh": task.get("speed_kmh", 16.5),
-        "priority": task.get("priority", 1),
-        "weight": task.get("weight", 0),
-        "waypoints": task.get("waypoints", []),
-        "start_time": task.get("start_time", datetime.now(timezone.utc).isoformat())
+        "weight": weight,
+        "start_time": start_time,
+        "waypoints": task.get("waypoints", [])
     }
     
     try:
-        response = supabase.table("roaming_tasks").insert(task_data).execute()
-        return {"status": "success", "data": response.data}
+        supabase.table("roaming_tasks").insert(task_data).execute()
+        return {"status": "success"}
     except Exception as e:
-        print(f"DEBUG ERROR: {e}") # 檢查這裡的錯誤
         raise HTTPException(status_code=400, detail=str(e))
-
 @app.get("/tasks/")
 async def get_tasks():
     try:
